@@ -1,0 +1,27 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repository.
+# MONGODB_URI is marked sync:false so it is entered in the dashboard and never
+# lives in the repository.
+services:
+  - type: web
+    name: morsh-crm-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false          # paste the Atlas connection string in the dashboard
+      - key: JWT_SECRET
+        generateValue: true  # Render generates a strong value
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: BCRYPT_ROUNDS
+        value: "10"
+      - key: CORS_ORIGIN
+        sync: false          # set to the Vercel URL once the frontend is deployed
