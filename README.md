@@ -408,6 +408,11 @@ Supports `page`, `limit`, `search`, `status`, `owner`, `sortBy`, `sortOrder`.
 | `GET` | `/activities/:recordId` | ADMIN, SALES | Timeline for a lead or customer id |
 | `DELETE` | `/activities/:id` | **ADMIN only** | Delete |
 
+Types: `CALL` `MEETING` `EMAIL` `NOTE` `TASK`. The parent record is resolved
+tenant-scoped before an activity is read or written, so activities cannot be attached to —
+or read from — another organization's lead by guessing its id. In the UI this surfaces on
+the lead and customer detail pages as an activity timeline.
+
 #### Reports
 
 | Method | Path | Role | Description |
