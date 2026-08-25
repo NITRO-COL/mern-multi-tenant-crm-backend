@@ -15,7 +15,7 @@ import reportRoutes from "./modules/reports/report.routes.js";
 import userRoutes from "./modules/users/user.routes.js";
 import platformRoutes from "./modules/tenants/tenant.routes.js";
 
-export function createApp() {
+export function createApp({ getDbStatus } = {}) {
   const app = express();
 
   // Behind Render/Vercel proxies — required for correct client IPs in rate limiting.
@@ -49,9 +49,23 @@ export function createApp() {
     })
   );
 
-  app.get("/health", (_req, res) =>
-    res.json({ success: true, data: { status: "ok", uptime: process.uptime(), env: env.NODE_ENV } })
-  );
+  /**
+   * Liveness + readiness in one. Returns 200 as soon as the process is serving,
+   * with `database` reporting whether Mongo is actually reachable — a degraded
+   * deployment should be diagnosable, not just silent.
+   */
+  app.get("/health", (_req, res) => {
+    const database = getDbStatus?.() ?? "unknown";
+    res.json({
+      success: true,
+      data: {
+        status: "ok",
+        database,
+        uptime: Math.round(process.uptime()),
+        env: env.NODE_ENV,
+      },
+    });
+  });
 
   app.use("/api/auth", authRoutes);
   app.use("/api/leads", leadRoutes);

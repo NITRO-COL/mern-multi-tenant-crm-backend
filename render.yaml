@@ -9,7 +9,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm ci
+    buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
     envVars:
