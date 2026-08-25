@@ -5,6 +5,7 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 
 import { env } from "./config/env.js";
+import { logger } from "./shared/logger.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
 import authRoutes from "./modules/auth/auth.routes.js";
@@ -25,9 +26,19 @@ export function createApp({ getDbStatus } = {}) {
   app.use(
     cors({
       origin(origin, callback) {
-        // Same-origin/curl requests have no Origin header — allow them through.
+        // Same-origin and non-browser requests (curl, Postman) carry no Origin.
         if (!origin || env.corsOrigins.includes(origin)) return callback(null, true);
-        callback(new Error("Not allowed by CORS"));
+
+        /**
+         * Reject by withholding the CORS headers, not by throwing.
+         *
+         * Throwing here turns every request from an unlisted origin into a 500,
+         * which misreports a client-side condition as a server fault and buries
+         * real errors in the log. Without the headers the browser blocks the
+         * response on its own, which is the correct enforcement point.
+         */
+        logger.warn(`CORS: origin not allowed — ${origin}. Check CORS_ORIGIN.`);
+        return callback(null, false);
       },
       credentials: true,
     })
