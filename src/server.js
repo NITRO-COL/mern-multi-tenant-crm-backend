@@ -19,26 +19,37 @@ import { logger } from "./shared/logger.js";
 
 let dbStatus = "connecting";
 
-async function connectWithRetry({ attempts = 10, baseDelayMs = 2000 } = {}) {
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+/**
+ * Reconnect forever, with capped exponential backoff.
+ *
+ * Giving up after N attempts means an infrastructure change that fixes the
+ * cause — widening a database allowlist, a cluster finishing its resume — still
+ * requires a manual redeploy to take effect. A service that heals itself the
+ * moment the dependency returns is strictly better, and the capped backoff keeps
+ * a long outage from turning into a busy loop.
+ */
+async function connectWithRetry({ baseDelayMs = 2000, maxDelayMs = 30_000 } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
     try {
       await connectDatabase();
       dbStatus = "connected";
+      logger.info("MongoDB connected");
       return;
     } catch (err) {
       dbStatus = "error";
-      const delay = Math.min(baseDelayMs * attempt, 30_000);
-      logger.error(
-        `MongoDB connection failed (attempt ${attempt}/${attempts}) — retrying in ${delay / 1000}s`,
-        err.message
-      );
-      if (attempt === attempts) {
+      const delay = Math.min(baseDelayMs * attempt, maxDelayMs);
+
+      // Loud and specific the first few times, then quiet — a long outage
+      // should not bury every other log line.
+      if (attempt <= 3 || attempt % 10 === 0) {
         logger.error(
-          "Could not reach MongoDB. Check MONGODB_URI and that the database " +
-            "allows connections from this host (Atlas -> Network Access)."
+          `MongoDB connection failed (attempt ${attempt}) — retrying in ${delay / 1000}s. ` +
+            "Check MONGODB_URI and that the database allows connections from this host " +
+            "(Atlas -> Network Access).",
+          err.message
         );
-        return;
       }
+
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
