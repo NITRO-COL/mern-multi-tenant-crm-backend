@@ -31,7 +31,7 @@ export const TENANTS = [
     seed: 76451903,
     leadCount: 38,
     users: [
-      { name: "Rajendra Singh", email: "admin@globex.com", password: "Admin@123", role: "ADMIN" },
+      { name: "Kabir Malhotra", email: "admin@globex.com", password: "Admin@123", role: "ADMIN" },
       { name: "Meera Iyer", email: "sales@globex.com", password: "Sales@123", role: "SALES" },
     ],
   },
