@@ -150,6 +150,86 @@ Or run `npm test` in `server/`, which automates all of the above plus 23 more ca
 
 ---
 
+## Reviewing this in 10 minutes
+
+If you only have a few minutes, this is the shortest path through everything the
+brief asks for.
+
+### 1. Prove tenant isolation without leaving the browser (3 min)
+
+1. Open the app and sign in as **`admin@acme.com` / `Admin@123`**
+   (the login screen's **Demo accounts** panel fills this in one click).
+2. Go to **Leads**, click any lead, and copy the URL — it ends in that lead's id.
+3. Sign out. Sign in as **`admin@globex.com` / `Admin@123`**.
+4. Paste the Acme URL back into the address bar.
+
+   → *"This lead does not exist in your organization."* The API answered **404**, not
+   403 — a 403 would confirm the record is real and let an attacker enumerate ids.
+
+5. Compare the two dashboards: Acme and Globex show different totals, different
+   pipelines and different recent leads. Neither can see the other.
+
+### 2. Prove role enforcement (1 min)
+
+Sign in as **`sales@acme.com` / `Sales@123`** and open any lead.
+
+→ **Edit** and **Log activity** are there; **Delete** is gone. Hiding the button is
+only cosmetic, so verify the real check with curl:
+
+```bash
+SALES=$(curl -s -X POST <API>/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"sales@acme.com","password":"Sales@123"}' | jq -r .data.token)
+
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE <API>/api/leads/<any-id> \
+  -H "Authorization: Bearer $SALES"      # → 403
+```
+
+### 3. Run the automated suite (2 min)
+
+```bash
+npm install && npm test
+```
+
+27 tests, no external database — an in-memory MongoDB is started for the run. They
+automate section 14 of the brief: cross-tenant GET/PUT/DELETE on every resource,
+injected `tenantId` in create and update payloads, cross-tenant user assignment, role
+escalation, token-audience confusion, and tenant-scoped reporting.
+
+### 4. Or run the attacks from Postman (2 min)
+
+Import `postman/Morsh-CRM.postman_collection.json`, set `baseUrl`, then run
+**Auth → Login (Acme ADMIN)**, **Login (Globex ADMIN)**, **Login (Acme SALES)** and
+**Leads → List leads** — each stores what the next request needs.
+
+Now run the whole **🔒 Security — cross-tenant** folder. Every one of its thirteen
+requests is *expected to fail*, and each carries a test asserting the exact status.
+
+### 5. Where to look in the code (2 min)
+
+| What | File |
+|---|---|
+| `tenantId` derived from the token, nowhere else | [`src/middleware/authenticate.js`](src/middleware/authenticate.js) |
+| Repository that makes the scope non-optional | [`src/modules/leads/lead.repository.js`](src/modules/leads/lead.repository.js) |
+| Plugin that refuses un-scoped queries | [`src/shared/tenantPlugin.js`](src/shared/tenantPlugin.js) |
+| RBAC table | [`src/config/permissions.js`](src/config/permissions.js) |
+| Tenant-scoped aggregations | [`src/modules/reports/report.repository.js`](src/modules/reports/report.repository.js) |
+| The attacks | [`tests/tenant-isolation.test.js`](tests/tenant-isolation.test.js) |
+
+### Two findings worth mentioning
+
+Both were caught during development and are in the git history rather than glossed over:
+
+- **`.populate()` was querying across tenants.** A plain `.populate("assignedTo")`
+  issues `User.find({ _id: { $in: [...] } })` with no tenant filter. The Mongoose
+  plugin threw on the first test run; every populate now re-applies the scope. This is
+  precisely why that third layer exists.
+- **The client cache served the previous tenant's data after switching accounts.**
+  Query keys were identical across tenants and `staleTime` made the stale entry look
+  fresh, so it persisted until a reload. The cache is now cleared on every login and
+  logout, and every key is namespaced by tenant.
+
+---
+
 ## Environment variables
 
 ### `server/.env`
