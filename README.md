@@ -512,6 +512,9 @@ the lead and customer detail pages as an activity timeline.
 
 ## Data model
 
+> Full collection-by-collection breakdown, relationships and index rationale:
+> **[DATABASE.md](./DATABASE.md)**
+
 | Collection | Fields | Tenant-scoped |
 |---|---|:--:|
 | `tenants` | `name`, `slug` (unique), `status`, `schemaVersion`, `createdAt` | — (it *is* the scope) |
