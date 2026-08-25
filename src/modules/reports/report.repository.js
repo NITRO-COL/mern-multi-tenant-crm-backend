@@ -59,16 +59,25 @@ export async function leadStats(tenantId) {
           },
           { $sort: { _id: 1 } },
         ],
+        // The preceding window, so a KPI can say "up 12%" instead of just "46".
+        createdPrev30Days: [
+          { $match: { createdAt: { $gte: daysAgo(60), $lt: daysAgo(30) } } },
+          { $count: "value" },
+        ],
       },
     },
   ]);
+
+  const trend = fillDateGaps(result.createdLast30Days, 30);
 
   return {
     total: result.total[0]?.value ?? 0,
     byStatus: fillBuckets(result.byStatus, LEAD_STATUSES),
     bySource: fillBuckets(result.bySource, LEAD_SOURCES),
     recent: result.recent,
-    trend: result.createdLast30Days.map((d) => ({ date: d._id, count: d.count })),
+    trend,
+    createdLast30: trend.reduce((sum, d) => sum + d.count, 0),
+    createdPrev30: result.createdPrev30Days[0]?.value ?? 0,
   };
 }
 
@@ -81,6 +90,11 @@ export async function customerStats(tenantId) {
       $facet: {
         total: [{ $count: "value" }],
         byStatus: [{ $group: { _id: "$status", count: { $sum: 1 } } }],
+        createdLast30: [{ $match: { createdAt: { $gte: daysAgo(30) } } }, { $count: "value" }],
+        createdPrev30: [
+          { $match: { createdAt: { $gte: daysAgo(60), $lt: daysAgo(30) } } },
+          { $count: "value" },
+        ],
       },
     },
   ]);
@@ -88,6 +102,8 @@ export async function customerStats(tenantId) {
   return {
     total: result.total[0]?.value ?? 0,
     byStatus: fillBuckets(result.byStatus, ["ACTIVE", "INACTIVE", "CHURNED"]),
+    createdLast30: result.createdLast30[0]?.value ?? 0,
+    createdPrev30: result.createdPrev30[0]?.value ?? 0,
   };
 }
 
@@ -117,6 +133,22 @@ export async function activityStats(tenantId) {
 function fillBuckets(rows, allKeys) {
   const found = new Map(rows.map((r) => [r._id, r.count]));
   return allKeys.map((key) => ({ key, count: found.get(key) ?? 0 }));
+}
+
+/**
+ * $group emits only the days that had records. A sparkline needs a value for
+ * every day, otherwise gaps compress the line and misrepresent the shape.
+ */
+function fillDateGaps(rows, days) {
+  const found = new Map(rows.map((r) => [r._id, r.count]));
+  const out = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    out.push({ date: key, count: found.get(key) ?? 0 });
+  }
+  return out;
 }
 
 function daysAgo(n) {
